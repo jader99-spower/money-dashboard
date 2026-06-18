@@ -49,7 +49,7 @@ export default function ExpensesBarChart({ data }: Props) {
           tickLine={false}
         />
         <Tooltip
-          formatter={(v: number) => [`₩${v.toLocaleString()}`, "월 합계"]}
+          formatter={(v) => [`₩${Number(v).toLocaleString()}`, "월 합계"]}
           contentStyle={{
             background: "#1e2530",
             border: "1px solid rgba(255,255,255,0.1)",

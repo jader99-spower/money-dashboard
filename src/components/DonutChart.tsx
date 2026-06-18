@@ -41,7 +41,7 @@ export default function DonutChart({ data, total }: DonutChartProps) {
             ))}
           </Pie>
           <Tooltip
-            formatter={(value: number, name: string) => [`${value}%`, name]}
+            formatter={(value) => [`${value}%`]}
             contentStyle={{
               background: "#1e2530",
               border: "1px solid rgba(255,255,255,0.1)",
