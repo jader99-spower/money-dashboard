@@ -1,16 +1,18 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { createHmac } from "crypto";
+
+function makeToken() {
+  const secret = process.env.AUTH_SECRET ?? "dev-secret";
+  return createHmac("sha256", secret).update("admin-session-v1").digest("hex");
+}
 
 export function proxy(request: NextRequest) {
   const isDashboard = request.nextUrl.pathname.startsWith("/dashboard");
   const isRoot = request.nextUrl.pathname === "/";
 
-  // NextAuth v5 sets __Secure- prefix on HTTPS (production), plain on HTTP (dev)
-  const sessionToken =
-    request.cookies.get("__Secure-authjs.session-token") ??
-    request.cookies.get("authjs.session-token");
-
-  const isAuthenticated = !!sessionToken;
+  const cookie = request.cookies.get("admin-session");
+  const isAuthenticated = cookie?.value === makeToken();
 
   if (isDashboard && !isAuthenticated) {
     return NextResponse.redirect(new URL("/", request.url));

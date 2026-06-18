@@ -1,9 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
-import { usePathname } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Wallet,
@@ -12,6 +10,7 @@ import {
   Sparkles,
   LogOut,
   ChevronRight,
+  ShieldCheck,
 } from "lucide-react";
 
 const navItems = [
@@ -24,15 +23,15 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { data: session } = useSession();
+  const router = useRouter();
 
   const isActive = (href: string) =>
     href === "/dashboard" ? pathname === href : pathname.startsWith(href);
 
-  const userName = session?.user?.name ?? "사용자";
-  const userEmail = session?.user?.email ?? "";
-  const avatarUrl = session?.user?.image ?? null;
-  const avatarInitial = userName.charAt(0);
+  async function handleLogout() {
+    await fetch("/api/logout", { method: "POST" });
+    router.push("/");
+  }
 
   return (
     <aside
@@ -105,33 +104,23 @@ export default function Sidebar() {
         style={{ borderTop: "1px solid var(--border-color)" }}
       >
         <div className="flex items-center gap-3 px-3 py-2.5">
-          {avatarUrl ? (
-            <Image
-              src={avatarUrl}
-              alt={userName}
-              width={32}
-              height={32}
-              className="w-8 h-8 rounded-full shrink-0 object-cover"
-            />
-          ) : (
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-              style={{ background: "linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)" }}
-            >
-              {avatarInitial}
-            </div>
-          )}
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+            style={{ background: "linear-gradient(135deg, #1e3a5f 0%, #1e40af 100%)", border: "1px solid rgba(59,130,246,0.3)" }}
+          >
+            <ShieldCheck size={15} className="text-blue-300" />
+          </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>
-              {userName}
+              관리자
             </p>
             <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>
-              {userEmail}
+              admin
             </p>
           </div>
         </div>
         <button
-          onClick={() => signOut({ callbackUrl: "/" })}
+          onClick={handleLogout}
           className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm transition-colors"
           style={{ color: "var(--text-muted)" }}
           onMouseEnter={(e) => {
