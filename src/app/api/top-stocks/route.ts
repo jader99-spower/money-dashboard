@@ -9,7 +9,7 @@ type StockItem = {
   volume: number;    // 만주 단위
 };
 
-const SYMBOLS = [
+const SYMBOLS: { ticker: string; name: string }[] = [
   { ticker: "005930.KS", name: "삼성전자" },
   { ticker: "000660.KS", name: "SK하이닉스" },
   { ticker: "373220.KS", name: "LG에너지솔루션" },
@@ -32,7 +32,6 @@ const SYMBOLS = [
   { ticker: "010130.KS", name: "고려아연" },
 ];
 
-// 야후 파이낸스 fetch 실패 시 사용할 폴백 데이터
 const FALLBACK: Record<string, Omit<StockItem, "rank" | "name">> = {
   "005930.KS": { price:    71300, changePercent: +2.10, marketCap: 475.2, volume: 1284 },
   "000660.KS": { price:   218000, changePercent: +3.42, marketCap: 159.1, volume:  382 },
@@ -56,51 +55,62 @@ const FALLBACK: Record<string, Omit<StockItem, "rank" | "name">> = {
   "010130.KS": { price:  1458000, changePercent: +0.89, marketCap:  19.7, volume:   11 },
 };
 
-async function fetchQuote(ticker: string) {
-  const encoded = encodeURIComponent(ticker);
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?range=1d&interval=1d&includePrePost=false`;
+// v7 quote API — 모든 심볼을 단 1회 요청으로 처리
+async function fetchAllQuotes(): Promise<Map<string, Omit<StockItem, "rank" | "name">>> {
+  const tickers = SYMBOLS.map((s) => s.ticker).join(",");
+  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(tickers)}&fields=regularMarketPrice,regularMarketChangePercent,regularMarketVolume,marketCap`;
 
   const res = await fetch(url, {
     headers: {
       "User-Agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
       Accept: "application/json",
-      "Accept-Language": "ko-KR,ko;q=0.9",
+      "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8",
+      Referer: "https://finance.yahoo.com/",
     },
     next: { revalidate: 60 },
   });
 
-  if (!res.ok) throw new Error(`Yahoo Finance HTTP ${res.status} for ${ticker}`);
+  if (!res.ok) throw new Error(`Yahoo Finance v7 HTTP ${res.status}`);
 
   const json = await res.json();
-  const meta = json?.chart?.result?.[0]?.meta;
-  if (!meta?.regularMarketPrice) throw new Error(`No price for ${ticker}`);
+  const results: Record<string, unknown>[] = json?.quoteResponse?.result ?? [];
 
-  return {
-    price: Number(meta.regularMarketPrice),
-    changePercent: Number(meta.regularMarketChangePercent ?? 0),
-    marketCap: Number(meta.marketCap ?? 0) / 1_000_000_000_000,
-    volume: Math.round(Number(meta.regularMarketVolume ?? 0) / 10_000),
-  };
+  const map = new Map<string, Omit<StockItem, "rank" | "name">>();
+  for (const r of results) {
+    const ticker = r.symbol as string;
+    const price = Number(r.regularMarketPrice ?? 0);
+    const changePercent = Number(r.regularMarketChangePercent ?? 0);
+    const marketCap = Number(r.marketCap ?? 0) / 1_000_000_000_000;
+    const volume = Math.round(Number(r.regularMarketVolume ?? 0) / 10_000);
+    if (price > 0) {
+      map.set(ticker, { price, changePercent, marketCap, volume });
+    }
+  }
+  return map;
 }
 
 export async function GET() {
-  const results = await Promise.allSettled(
-    SYMBOLS.map(({ ticker }) => fetchQuote(ticker))
-  );
-
+  let liveMap = new Map<string, Omit<StockItem, "rank" | "name">>();
   let anyLive = false;
 
-  const items: StockItem[] = SYMBOLS.map(({ ticker, name }, i) => {
-    const result = results[i];
-    if (result.status === "fulfilled") {
-      anyLive = true;
-      return { rank: 0, name, ...result.value };
-    }
-    return { rank: 0, name, ...FALLBACK[ticker] };
+  try {
+    liveMap = await fetchAllQuotes();
+    anyLive = liveMap.size > 0;
+  } catch {
+    // 전체 실패 시 모두 FALLBACK 사용
+  }
+
+  const items: StockItem[] = SYMBOLS.map(({ ticker, name }) => {
+    const live = liveMap.get(ticker);
+    return {
+      rank: 0,
+      name,
+      ...(live ?? FALLBACK[ticker]),
+    };
   });
 
-  // 시가총액 기준 내림차순 정렬 후 순위 부여
+  // 시가총액 내림차순 정렬 후 순위 부여
   items.sort((a, b) => b.marketCap - a.marketCap);
   items.forEach((item, i) => { item.rank = i + 1; });
 
