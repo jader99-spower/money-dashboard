@@ -29,38 +29,14 @@ type NewsItem = {
   summary: string;
 };
 
-// ── 시총 Top 20 ──────────────────────────────────────────────────
-type Stock = {
+type StockItem = {
   rank: number;
   name: string;
   price: number;
   changePercent: number;
-  marketCap: number;
-  volume: number;
+  marketCap: number; // 조원
+  volume: number;    // 만주
 };
-
-const TOP20_STOCKS: Stock[] = [
-  { rank:  1, name: "삼성전자",           price:    71300, changePercent: +2.10, marketCap: 475.2, volume: 1284 },
-  { rank:  2, name: "SK하이닉스",         price:   218000, changePercent: +3.42, marketCap: 159.1, volume:  382 },
-  { rank:  3, name: "LG에너지솔루션",     price:   392000, changePercent: -0.76, marketCap:  92.0, volume:   94 },
-  { rank:  4, name: "삼성바이오로직스",   price:  1124000, changePercent: +1.17, marketCap:  80.3, volume:   18 },
-  { rank:  5, name: "현대차",             price:   286500, changePercent: +0.88, marketCap:  62.4, volume:  204 },
-  { rank:  6, name: "기아",               price:   118700, changePercent: -0.33, marketCap:  48.1, volume:  318 },
-  { rank:  7, name: "한화에어로스페이스", price:   548000, changePercent: +4.12, marketCap:  45.3, volume:   72 },
-  { rank:  8, name: "KB금융",             price:    89200, changePercent: +0.79, marketCap:  36.2, volume:  162 },
-  { rank:  9, name: "POSCO홀딩스",        price:   412000, changePercent: -1.53, marketCap:  34.8, volume:   88 },
-  { rank: 10, name: "셀트리온",           price:   243000, changePercent: +2.78, marketCap:  33.2, volume:  147 },
-  { rank: 11, name: "현대모비스",         price:   354000, changePercent: +0.71, marketCap:  33.1, volume:   56 },
-  { rank: 12, name: "네이버",             price:   198500, changePercent: +1.52, marketCap:  32.5, volume:  119 },
-  { rank: 13, name: "신한지주",           price:    54600, changePercent: +0.46, marketCap:  27.3, volume:  208 },
-  { rank: 14, name: "카카오",             price:    58900, changePercent: +3.16, marketCap:  26.2, volume:  437 },
-  { rank: 15, name: "크래프톤",           price:   312000, changePercent: +1.82, marketCap:  24.8, volume:   68 },
-  { rank: 16, name: "두산에너빌리티",     price:    31850, changePercent: -0.62, marketCap:  24.1, volume:  612 },
-  { rank: 17, name: "삼성SDI",            price:   312000, changePercent: -2.12, marketCap:  21.4, volume:   74 },
-  { rank: 18, name: "LG화학",             price:   298000, changePercent: -1.18, marketCap:  21.0, volume:   83 },
-  { rank: 19, name: "LG전자",             price:   124000, changePercent: -0.40, marketCap:  20.3, volume:  156 },
-  { rank: 20, name: "고려아연",           price:  1458000, changePercent: +0.89, marketCap:  19.7, volume:   11 },
-];
 
 // ── 헬퍼 ─────────────────────────────────────────────────────────
 type SortKey = "marketCap" | "changePercent" | "volume";
@@ -102,6 +78,26 @@ function SkeletonIndexCard() {
         <div className="h-5 w-16 rounded-full" style={{ background: "rgba(255,255,255,0.05)" }} />
       </div>
     </div>
+  );
+}
+
+// ── 스켈레톤: 테이블 행 ──────────────────────────────────────────
+function SkeletonTableRow() {
+  return (
+    <tr style={{ borderBottom: "1px solid var(--border-color)" }}>
+      {[28, 88, 72, 60, 56, 52].map((w, i) => (
+        <td key={i} className="px-5 py-3.5">
+          <div
+            className="h-4 rounded animate-pulse"
+            style={{
+              width: w,
+              background: "rgba(255,255,255,0.07)",
+              marginLeft: i >= 2 ? "auto" : undefined,
+            }}
+          />
+        </td>
+      ))}
+    </tr>
   );
 }
 
@@ -171,18 +167,23 @@ export default function MarketPage() {
   const [sortKey, setSortKey] = useState<SortKey>("marketCap");
 
   // 실시간 지수 데이터
-  const [indices, setIndices]             = useState<IndexData[]>([]);
+  const [indices, setIndices]               = useState<IndexData[]>([]);
   const [indicesLoading, setIndicesLoading] = useState(true);
-  const [indicesSource, setIndicesSource]   = useState<"live" | "mock" | "partial">("mock");
+  const [indicesSource, setIndicesSource]   = useState<"live" | "mock">("mock");
   const [fetchedAt, setFetchedAt]           = useState<string>("");
+
+  // 시총 TOP 20 실시간 데이터
+  const [stocks, setStocks]               = useState<StockItem[]>([]);
+  const [stocksLoading, setStocksLoading] = useState(true);
+  const [stocksSource, setStocksSource]   = useState<"live" | "mock">("mock");
 
   // 뉴스 데이터
   const [news, setNews]               = useState<NewsItem[]>([]);
   const [newsLoading, setNewsLoading] = useState(true);
 
   const sorted = useMemo(
-    () => [...TOP20_STOCKS].sort((a, b) => b[sortKey] - a[sortKey]),
-    [sortKey]
+    () => [...stocks].sort((a, b) => b[sortKey] - a[sortKey]),
+    [stocks, sortKey]
   );
 
   // 지수 fetch
@@ -196,6 +197,18 @@ export default function MarketPage() {
       })
       .catch(() => setIndices([]))
       .finally(() => setIndicesLoading(false));
+  }, []);
+
+  // 시총 TOP 20 fetch
+  useEffect(() => {
+    fetch("/api/top-stocks")
+      .then((r) => r.json())
+      .then((d) => {
+        setStocks(d.items ?? []);
+        setStocksSource(d.source ?? "mock");
+      })
+      .catch(() => setStocks([]))
+      .finally(() => setStocksLoading(false));
   }, []);
 
   // 뉴스 fetch
@@ -240,7 +253,9 @@ export default function MarketPage() {
               {indicesSource === "live" ? "실시간" : "모크 데이터"}
             </span>
             {fetchedAt && (
-              <span>{new Date(fetchedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 기준</span>
+              <span>
+                {new Date(fetchedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 기준
+              </span>
             )}
           </div>
         )}
@@ -324,11 +339,27 @@ export default function MarketPage() {
               시가총액 상위 20위
             </h2>
             <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-              2026년 기준 KOSPI·KOSDAQ 시총 순위 (모의 데이터)
+              {stocksLoading
+                ? "데이터 로딩 중..."
+                : stocksSource === "live"
+                  ? "실시간 Yahoo Finance 기준 · KOSPI·KOSDAQ"
+                  : "모의 데이터 (Yahoo Finance 연결 실패)"}
             </p>
           </div>
 
           <div className="flex items-center gap-1.5">
+            {/* 종목 데이터 소스 뱃지 */}
+            {!stocksLoading && (
+              <span
+                className="px-2 py-0.5 rounded-full text-xs font-medium mr-1"
+                style={{
+                  background: stocksSource === "live" ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.12)",
+                  color:      stocksSource === "live" ? "#34d399"                : "#fbbf24",
+                }}
+              >
+                {stocksSource === "live" ? "실시간" : "모크"}
+              </span>
+            )}
             <ArrowUpDown size={13} style={{ color: "var(--text-muted)" }} />
             {SORT_BUTTONS.map(({ key, label }) => (
               <button
@@ -363,65 +394,71 @@ export default function MarketPage() {
               </tr>
             </thead>
             <tbody>
-              {sorted.map((stock, idx) => {
-                const { color, icon: ChangeIcon } = getChangeStyle(stock.changePercent);
-                return (
-                  <tr
-                    key={stock.name}
-                    className="transition-colors"
-                    style={{ borderBottom: "1px solid var(--border-color)" }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = "rgba(255,255,255,0.025)"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = "transparent"; }}
-                  >
-                    <td className="px-5 py-3 w-12">
-                      <span
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-bold"
-                        style={{
-                          background: idx < 3 ? "rgba(59,130,246,0.12)" : "rgba(255,255,255,0.05)",
-                          color:      idx < 3 ? "#60a5fa"                : "var(--text-muted)",
+              {stocksLoading
+                ? Array.from({ length: 20 }).map((_, i) => <SkeletonTableRow key={i} />)
+                : sorted.map((stock, idx) => {
+                    const { color, icon: ChangeIcon } = getChangeStyle(stock.changePercent);
+                    return (
+                      <tr
+                        key={stock.name}
+                        className="transition-colors"
+                        style={{ borderBottom: "1px solid var(--border-color)" }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLTableRowElement).style.background = "rgba(255,255,255,0.025)";
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLTableRowElement).style.background = "transparent";
                         }}
                       >
-                        {stock.rank}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3">
-                      <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                        {stock.name}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <span className="text-sm font-bold tabular-nums" style={{ color: "var(--text-primary)" }}>
-                        {fmtPrice(stock.price)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <span
-                        className="inline-flex items-center justify-end gap-1 text-sm font-semibold tabular-nums"
-                        style={{ color }}
-                      >
-                        <ChangeIcon size={13} />
-                        {fmtPct(stock.changePercent)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <span className="text-sm tabular-nums" style={{ color: "var(--text-primary)" }}>
-                        {stock.marketCap.toFixed(1)}조
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <span className="text-sm tabular-nums" style={{ color: "var(--text-muted)" }}>
-                        {stock.volume.toLocaleString()}만주
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
+                        <td className="px-5 py-3 w-12">
+                          <span
+                            className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-bold"
+                            style={{
+                              background: idx < 3 ? "rgba(59,130,246,0.12)" : "rgba(255,255,255,0.05)",
+                              color:      idx < 3 ? "#60a5fa"                : "var(--text-muted)",
+                            }}
+                          >
+                            {stock.rank}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                            {stock.name}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <span className="text-sm font-bold tabular-nums" style={{ color: "var(--text-primary)" }}>
+                            {fmtPrice(stock.price)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <span
+                            className="inline-flex items-center justify-end gap-1 text-sm font-semibold tabular-nums"
+                            style={{ color }}
+                          >
+                            <ChangeIcon size={13} />
+                            {fmtPct(stock.changePercent)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <span className="text-sm tabular-nums" style={{ color: "var(--text-primary)" }}>
+                            {stock.marketCap.toFixed(1)}조
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <span className="text-sm tabular-nums" style={{ color: "var(--text-muted)" }}>
+                            {stock.volume.toLocaleString()}만주
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
             </tbody>
           </table>
         </div>
 
         <p className="text-xs px-5 py-3" style={{ color: "var(--text-muted)", borderTop: "1px solid var(--border-color)" }}>
-          * 시총 순위는 2026년 기준 모의(Mock) 데이터이며 실제 시세와 다를 수 있습니다.
+          * 거래 시간 외에는 전일 종가 기준으로 표시됩니다. 시가총액은 Yahoo Finance 기준이며 실제와 다를 수 있습니다.
         </p>
       </div>
 
